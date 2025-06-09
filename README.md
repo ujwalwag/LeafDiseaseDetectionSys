@@ -1,4 +1,4 @@
-# LeafDiseaseDetectionSysLeaf Disease Detection System
+Leaf Disease Detection System
 This project aims to build a Leaf Disease Detection System using deep learning techniques. The system classifies healthy and diseased leaves to help agricultural professionals and enthusiasts identify plant health issues effectively.
 
 🌱 Project Structure
