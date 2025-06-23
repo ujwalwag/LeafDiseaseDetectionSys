@@ -14,13 +14,15 @@ from sklearn.metrics import confusion_matrix, classification_report
 import seaborn as sns
 import uuid
 
+torch.cuda.empty_cache()
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
 ORGANIZED_DATA_ROOT = "PlantVillage_Organized_Processed_Dataset"
 
-NUM_RANDOM_CLASSES = 5
 
 IMG_HEIGHT, IMG_WIDTH = 224, 224
 
-BATCH_SIZE = 32
+BATCH_SIZE = 16
 
 GRADIENT_ACCUMULATION_STEPS = 4 
 
@@ -46,8 +48,8 @@ ALL_CLASS_LABELS = [
     "Tomato___Tomato_Yellow_Leaf_Curl_Virus", "Tomato___Tomato_mosaic_virus", "Tomato___healthy"
 ]
 
-TEMP_DATA_DIR = "temp_5_class_dataset"
-MODEL_SAVE_PATH = "best_resnet50_plant_disease_model.pth"
+TEMP_DATA_DIR = "temp_all_class_dataset" 
+MODEL_SAVE_PATH = "best_resnet50_plant_disease_model_all_classes.pth" 
 
 SCRIPT_RUN_ID = str(uuid.uuid4())[:8] 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -138,7 +140,7 @@ def train_model(model, criterion, optimizer, dataloaders, dataset_sizes, num_epo
                     loss = criterion(outputs, labels)
 
                     if phase == 'train':
-                 
+                    
                         loss = loss / GRADIENT_ACCUMULATION_STEPS
                         loss.backward()
 
@@ -211,11 +213,12 @@ def plot_graphs(history, num_epochs):
 
 def plot_confusion_matrix(true_labels, predicted_labels, class_names):
     cm = confusion_matrix(true_labels, predicted_labels)
-    plt.figure(figsize=(8, 7))
+    plt.figure(figsize=(12, 10)) # Increased figure size for better readability with more classes
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=class_names, yticklabels=class_names)
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
     plt.title('Confusion Matrix')
+    plt.tight_layout() # Adjust layout to prevent labels from overlapping
     plt.show()
 
 def plot_per_class_accuracy(true_labels, predicted_labels, class_names):
@@ -232,7 +235,7 @@ def plot_per_class_accuracy(true_labels, predicted_labels, class_names):
     class_names_sorted = [item[0] for item in sorted_accuracies]
     accuracy_values_sorted = [item[1] for item in sorted_accuracies]
 
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(10, 12)) # Increased figure size for more classes
     plt.barh(class_names_sorted, accuracy_values_sorted, color='skyblue')
     plt.xlabel('Accuracy')
     plt.title('Per-Class Accuracy')
@@ -243,10 +246,9 @@ def plot_per_class_accuracy(true_labels, predicted_labels, class_names):
 
 
 if __name__ == "__main__":
-    if len(ALL_CLASS_LABELS) < NUM_RANDOM_CLASSES:
-        raise ValueError(f"Cannot select {NUM_RANDOM_CLASSES} classes from only {len(ALL_CLASS_LABELS)} available.")
-    selected_classes = random.sample(ALL_CLASS_LABELS, NUM_RANDOM_CLASSES)
-    print(f"Randomly selected {NUM_RANDOM_CLASSES} classes: {selected_classes}")
+    # Use all classes instead of random selection
+    selected_classes = ALL_CLASS_LABELS
+    print(f"Training on all {len(selected_classes)} classes.")
 
     prepare_subset_data(ORGANIZED_DATA_ROOT, TEMP_DATA_DIR, selected_classes)
 
