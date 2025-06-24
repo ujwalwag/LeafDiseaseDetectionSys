@@ -7,7 +7,6 @@ from tkinter import filedialog, Label, Button, PhotoImage, OptionMenu, StringVar
 import os
 from transformers import ViTFeatureExtractor, ViTForImageClassification
 
-
 IMG_HEIGHT_RESNET_VIT, IMG_WIDTH_RESNET_VIT = 224, 224
 IMG_HEIGHT_INCEPTION, IMG_WIDTH_INCEPTION = 299, 299
 
@@ -35,11 +34,10 @@ NUM_CLASSES = len(EFFECTIVE_CLASS_LABELS_TRAINED)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
-
 MODEL_PATHS_CONFIG = {
     "ResNet50": "best_resnet50_plant_disease_model_all_classes.pth",
     "InceptionV3": "best_inceptionv3_plant_disease_model.pth",
-    "ViT": "best_fine_tuned_vit_model.pth"
+    "ViT": "fine_tuned_vit_model.pth"
 }
 
 current_model = None
@@ -181,11 +179,16 @@ def upload_and_predict():
 
     try:
         with torch.no_grad(): 
-            outputs = current_model(input_image_tensor)
-            if isinstance(outputs, tuple):
-                outputs = outputs[0]
+            model_output = current_model(input_image_tensor)
             
-            probabilities = torch.nn.functional.softmax(outputs, dim=1)
+            if hasattr(model_output, 'logits'):
+                logits = model_output.logits
+            elif isinstance(model_output, tuple):
+                logits = model_output[0]
+            else:
+                logits = model_output
+            
+            probabilities = torch.nn.functional.softmax(logits, dim=1)
             predicted_prob, predicted_class_index = torch.max(probabilities, 1)
 
         predicted_class_label = EFFECTIVE_CLASS_LABELS_TRAINED[predicted_class_index.item()]
