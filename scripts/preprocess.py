@@ -1,257 +1,138 @@
-import torch
-import torch.nn as nn
-from torchvision import transforms, models
-from PIL import Image, ImageTk
-import tkinter as tk
-from tkinter import filedialog, Label, Button, PhotoImage, OptionMenu, StringVar
 import os
-from transformers import ViTFeatureExtractor, ViTForImageClassification
+import shutil
+import random
+from tqdm import tqdm 
+from PIL import Image 
 
-IMG_HEIGHT_RESNET_VIT, IMG_WIDTH_RESNET_VIT = 224, 224
-IMG_HEIGHT_INCEPTION, IMG_WIDTH_INCEPTION = 299, 299
 
-EFFECTIVE_CLASS_LABELS_TRAINED = [
-    "Apple___Apple_scab", "Apple___Black_rot", "Apple___Cedar_apple_rust", "Apple___healthy",
+SOURCE_DATA_ROOT = "PlantVillage-Dataset-Downloaded"
+
+
+OUTPUT_DATA_ROOT = "PlantVillage_Organized_Processed_Dataset"
+
+
+TRAIN_SPLIT_RATIO = 0.8
+
+TARGET_IMG_HEIGHT = 224
+TARGET_IMG_WIDTH = 224
+TARGET_IMG_SIZE = (TARGET_IMG_WIDTH, TARGET_IMG_HEIGHT) 
+
+
+CLASS_LABELS = [
+    "Apple___Apple_scab",
+    "Apple___Black_rot",
+    "Apple___Cedar_apple_rust",
+    "Apple___healthy",
     "Blueberry___healthy",
-    "Cherry_(including_sour)___Powdery_mildew", "Cherry_(including_sour)___healthy",
-    "Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot", "Corn_(maize)___Common_rust_",
-    "Corn_(maize)___Northern_Leaf_Blight", "Corn_(maize)___healthy",
-    "Grape___Black_rot", "Grape___Esca_(Black_Measles)", "Grape___Leaf_blight_(Isariopsis_Leaf_Spot)", "Grape___healthy",
+    "Cherry_(including_sour)___Powdery_mildew",
+    "Cherry_(including_sour)___healthy",
+    "Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot",
+    "Corn_(maize)___Common_rust_",
+    "Corn_(maize)___Northern_Leaf_Blight",
+    "Corn_(maize)___healthy",
+    "Grape___Black_rot",
+    "Grape___Esca_(Black_Measles)",
+    "Grape___Leaf_blight_(Isariopsis_Leaf_Spot)",
+    "Grape___healthy",
     "Orange___Haunglongbing_(Citrus_greening)",
-    "Peach___Bacterial_spot", "Peach___healthy",
-    "Pepper,_bell___Bacterial_spot", "Pepper,_bell___healthy",
-    "Potato___Early_blight", "Potato___Late_blight", "Potato___healthy",
+    "Peach___Bacterial_spot",
+    "Peach___healthy",
+    "Pepper,_bell___Bacterial_spot",
+    "Pepper,_bell___healthy",
+    "Potato___Early_blight",
+    "Potato___Late_blight",
+    "Potato___healthy",
     "Raspberry___healthy",
     "Soybean___healthy",
     "Squash___Powdery_mildew",
-    "Strawberry___Leaf_scorch", "Strawberry___healthy",
-    "Tomato___Bacterial_spot", "Tomato___Early_blight", "Tomato___Late_blight", "Tomato___Leaf_Mold",
-    "Tomato___Septoria_leaf_spot", "Tomato___Spider_mites Two-spotted_spider_mite", "Tomato___Target_Spot",
-    "Tomato___Tomato_Yellow_Leaf_Curl_Virus", "Tomato___Tomato_mosaic_virus", "Tomato___healthy"
+    "Strawberry___Leaf_scorch",
+    "Strawberry___healthy",
+    "Tomato___Bacterial_spot",
+    "Tomato___Early_blight",
+    "Tomato___Late_blight",
+    "Tomato___Leaf_Mold",
+    "Tomato___Septoria_leaf_spot",
+    "Tomato___Spider_mites Two-spotted_spider_mite",
+    "Tomato___Target_Spot",
+    "Tomato___Tomato_Yellow_Leaf_Curl_Virus",
+    "Tomato___Tomato_mosaic_virus",
+    "Tomato___healthy"
 ]
-NUM_CLASSES = len(EFFECTIVE_CLASS_LABELS_TRAINED)
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {device}")
+def create_directory_structure(base_path, classes):
 
-MODEL_PATHS_CONFIG = {
-    "ResNet50": "best_resnet50_plant_disease_model_all_classes.pth",
-    "InceptionV3": "best_inceptionv3_plant_disease_model.pth",
-    "ViT": "fine_tuned_vit_model.pth"
-}
+    train_path = os.path.join(base_path, "train")
+    test_path = os.path.join(base_path, "test")
 
-current_model = None
-current_preprocess_transform = None
-current_feature_extractor = None
+    os.makedirs(train_path, exist_ok=True)
+    os.makedirs(test_path, exist_ok=True)
 
-def get_resnet50_model(num_classes_model):
-    model = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
-    for param in model.parameters():
-        param.requires_grad = False
-    num_ftrs = model.fc.in_features
-    model.fc = nn.Linear(num_ftrs, num_classes_model)
-    return model.to(device)
+    print(f"Created base directories: {train_path} and {test_path}")
 
-def get_inceptionv3_model(num_classes_model):
-    # Changed from weights=... to pretrained=True for broader compatibility
-    model = models.inception_v3(pretrained=True, transform_input=True)
-    for param in model.parameters():
-        param.requires_grad = False
-    num_ftrs_main = model.fc.in_features
-    model.fc = nn.Linear(num_ftrs_main, num_classes_model)
-    if model.AuxLogits is not None:
-        num_ftrs_aux = model.AuxLogits.fc.in_features
-        model.AuxLogits.fc = nn.Linear(num_ftrs_aux, num_classes_model)
-    return model.to(device)
+    for cls in classes:
+        os.makedirs(os.path.join(train_path, cls), exist_ok=True)
+        os.makedirs(os.path.join(test_path, cls), exist_ok=True)
 
-def get_vit_model(num_classes_model):
-    model = ViTForImageClassification.from_pretrained(
-        'wambugu1738/crop_leaf_diseases_vit',
-        ignore_mismatched_sizes=True
-    )
-    in_features = model.classifier.in_features
-    model.classifier = nn.Linear(in_features, num_classes_model)
-    return model.to(device)
 
-def load_and_setup_model(model_type, model_path):
-    global current_model, current_preprocess_transform, current_feature_extractor
-
-    current_model = None
-    current_preprocess_transform = None
-    current_feature_extractor = None
-    
-    result_label.config(text="Loading model...", fg="blue")
-    confidence_label.config(text="", relief=tk.FLAT, bd=0)
-    image_label.config(image=None)
+def process_and_save_image(image_path, target_size, save_path):
 
     try:
-        if model_type == "ResNet50":
-            current_model = get_resnet50_model(NUM_CLASSES)
-            current_preprocess_transform = transforms.Compose([
-                transforms.Resize((IMG_HEIGHT_RESNET_VIT, IMG_WIDTH_RESNET_VIT)),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-            ])
-        elif model_type == "InceptionV3":
-            current_model = get_inceptionv3_model(NUM_CLASSES)
-            current_preprocess_transform = transforms.Compose([
-                transforms.Resize((IMG_HEIGHT_INCEPTION, IMG_WIDTH_INCEPTION)),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-            ])
-        elif model_type == "ViT":
-            current_model = get_vit_model(NUM_CLASSES)
-            current_feature_extractor = ViTFeatureExtractor.from_pretrained('wambugu71/crop_leaf_diseases_vit')
-            current_preprocess_transform = None
-        else:
-            result_label.config(text="Invalid model type selected.", fg="red")
-            return
+        with Image.open(image_path) as img:
 
-        print(f"Attempting to load {model_type} model from: {os.path.abspath(model_path)}")
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
 
-        if os.path.exists(model_path):
-            current_model.load_state_dict(torch.load(model_path, map_location=device))
-            current_model.eval()
-            result_label.config(text=f"{model_type} loaded successfully!", fg="green")
-            print(f"Model loaded successfully from {model_path}")
-        else:
-            result_label.config(text=f"Error: Model file '{os.path.basename(model_path)}' not found.", fg="red")
-            print(f"Error: Model file '{model_path}' not found.")
-            current_model = None
-            current_feature_extractor = None
-            print("Please ensure the model file exists in the same directory as this script, or update MODEL_SAVE_PATH.")
-
-    except Exception as e:
-        result_label.config(text=f"Error loading {model_type}: {e}", fg="red")
-        print(f"Error loading {model_type} from {model_path}: {e}")
-        current_model = None
-        current_feature_extractor = None
-        print("Possible reasons: model file is corrupted, or it was saved with a different PyTorch version/architecture.")
-
-def preprocess_image_for_prediction(image_path):
-    try:
-        image = Image.open(image_path).convert("RGB")
-
-        if current_feature_extractor:
-            input_tensor = current_feature_extractor(images=image, return_tensors="pt")
-            input_batch = input_tensor['pixel_values']
-        elif current_preprocess_transform:
-            input_tensor = current_preprocess_transform(image)
-            input_batch = input_tensor.unsqueeze(0)
-        else:
-            raise ValueError("No preprocessing method available. Model not loaded correctly.")
-
-        return input_batch.to(device), image
+            img = img.resize(target_size, Image.Resampling.LANCZOS)
+            img.save(save_path)
     except Exception as e:
         print(f"Error processing image {image_path}: {e}")
-        return None, None
 
-def display_image_in_tkinter(image_pil, predicted_class_label, confidence_score):
-    display_size = (300, 300)
-    img_display = image_pil.resize(display_size, Image.Resampling.LANCZOS)
-    
-    img_tk = ImageTk.PhotoImage(img_display)
+def distribute_dataset(source_root, output_root, classes, train_split_ratio, target_img_size):
 
-    image_label.config(image=img_tk)
-    image_label.image = img_tk 
+    create_directory_structure(output_root, classes)
 
-    result_label.config(text=f"Predicted: {predicted_class_label}", fg="#333333", font=("Arial", 16, "bold"))
-    
-    confidence_label.config(text=f"Confidence: {confidence_score:.2f}%", 
-                            fg="#006400", font=("Arial", 20, "bold"),
-                            relief=tk.RIDGE, bd=2, padx=10, pady=5) 
+    print("\nStarting dataset distribution and initial image processing...")
+    print(f"Images will be resized to {target_img_size[0]}x{target_img_size[1]} pixels and converted to RGB.")
+    print("Please note: Full pixel value normalization (mean/std subtraction) is *not* done here.")
+    print("That crucial step should still be performed dynamically during PyTorch data loading.")
 
-def upload_and_predict():
-    if current_model is None:
-        result_label.config(text="No model loaded. Please select and load a model.", fg="red")
-        confidence_label.config(text="", relief=tk.FLAT, bd=0)
-        return
+    total_files_processed = 0
+    for cls in tqdm(classes, desc="Processing classes"):
+        class_source_path = os.path.join(source_root, cls)
 
-    file_path = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg;*.jpeg;*.png")])
-    if not file_path:
-        return 
+        if not os.path.exists(class_source_path):
+            print(f"Warning: Source path for class '{cls}' not found: {class_source_path}. Skipping.")
+            continue
 
-    input_image_tensor, original_pil_image = preprocess_image_for_prediction(file_path)
+        images = [f for f in os.listdir(class_source_path) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+        random.shuffle(images) 
 
-    if input_image_tensor is None:
-        result_label.config(text="Error processing image.", fg="red")
-        confidence_label.config(text="", relief=tk.FLAT, bd=0)
-        return
+        num_train = int(len(images) * train_split_ratio)
+        train_images = images[:num_train]
+        test_images = images[num_train:]
 
-    try:
-        with torch.no_grad(): 
-            model_output = current_model(input_image_tensor)
-            
-            if hasattr(model_output, 'logits'):
-                logits = model_output.logits
-            elif isinstance(model_output, tuple):
-                logits = model_output[0]
-            else:
-                logits = model_output
-            
-            probabilities = torch.nn.functional.softmax(logits, dim=1)
-            predicted_prob, predicted_class_index = torch.max(probabilities, 1)
 
-        predicted_class_label = EFFECTIVE_CLASS_LABELS_TRAINED[predicted_class_index.item()]
-        confidence = predicted_prob.item() * 100
+        for img_name in train_images:
+            src_path = os.path.join(class_source_path, img_name)
+            dst_path = os.path.join(output_root, "train", cls, img_name)
+            process_and_save_image(src_path, target_img_size, dst_path)
+            total_files_processed += 1
 
-        display_image_in_tkinter(original_pil_image, predicted_class_label, confidence)
+        for img_name in test_images:
+            src_path = os.path.join(class_source_path, img_name)
+            dst_path = os.path.join(output_root, "test", cls, img_name)
+            process_and_save_image(src_path, target_img_size, dst_path)
+            total_files_processed += 1
 
-    except Exception as e:
-        print(f"Error during prediction: {e}")
-        result_label.config(text=f"Prediction Error: {e}", fg="red")
-        confidence_label.config(text="", relief=tk.FLAT, bd=0)
+    print(f"\nDataset distribution and initial processing complete! Total files processed: {total_files_processed}")
+    print(f"Organized and resized dataset saved to: {os.path.abspath(output_root)}")
+    print("Important Reminder: Final pixel normalization (mean/std subtraction) and data augmentation")
+    print("should be applied by `torchvision.transforms` in your PyTorch training script during data loading.")
 
-def switch_model(*args):
-    selected_model_type = model_selection_var.get()
-    model_path_to_load = MODEL_PATHS_CONFIG.get(selected_model_type, "")
-    load_and_setup_model(selected_model_type, model_path_to_load)
+if __name__ == "__main__":
 
-app = tk.Tk()
-app.title("Plant Disease Detector")
-app.geometry("700x780") 
-app.resizable(False, False)
-app.configure(bg="#e0e0e0")
-
-font_btn = ("Arial", 14, "bold")
-font_label = ("Arial", 12)
-font_result_main = ("Arial", 18, "bold")
-font_confidence = ("Arial", 20, "bold") 
-font_dropdown = ("Arial", 12)
-
-title_label = Label(app, text="Leaf Disease Detection System",
-                    font=("Arial", 20, "bold"), bg="#e0e0e0", fg="#333333")
-title_label.pack(pady=20)
-
-model_options = ["ResNet50", "InceptionV3", "ViT"]
-model_selection_var = StringVar(app)
-model_selection_var.set(model_options[0])
-
-model_dropdown_label = Label(app, text="Select Model:", font=font_label, bg="#e0e0e0", fg="#333333")
-model_dropdown_label.pack(pady=(0, 5))
-
-model_dropdown = OptionMenu(app, model_selection_var, *model_options, command=switch_model)
-model_dropdown.config(font=font_dropdown, bg="#cccccc", fg="#333333", activebackground="#a0a0a0")
-model_dropdown.pack(pady=(0, 10))
-
-upload_button = Button(app, text="Upload Image for Detection", command=upload_and_predict,
-                        font=font_btn, bg="#4CAF50", fg="white",
-                        activebackground="#45a049", activeforeground="white",
-                        relief=tk.RAISED, bd=3)
-upload_button.pack(pady=20)
-
-image_label = Label(app, bg="#ffffff", bd=2, relief=tk.SUNKEN)
-image_label.pack(pady=10)
-
-result_label = Label(app, text="Select a model and upload an image...",
-                      font=font_result_main, bg="#e0e0e0", fg="#333333", wraplength=600)
-result_label.pack(pady=10) 
-
-confidence_label = Label(app, text="",
-                         font=font_confidence, bg="#F0F8FF", fg="#006400", 
-                         relief=tk.RIDGE, bd=2, padx=10, pady=5) 
-confidence_label.pack(pady=10) 
-
-switch_model()
-
-app.mainloop()
+    if not os.path.exists(SOURCE_DATA_ROOT):
+        print(f"Error: Source data root not found at '{SOURCE_DATA_ROOT}'")
+        print("Please verify the path to your downloaded dataset (e.g., 'PlantVillage-Dataset-Downloaded/raw/color') and update SOURCE_DATA_ROOT in the script.")
+    else:
+        distribute_dataset(SOURCE_DATA_ROOT, OUTPUT_DATA_ROOT, CLASS_LABELS, TRAIN_SPLIT_RATIO, TARGET_IMG_SIZE)
