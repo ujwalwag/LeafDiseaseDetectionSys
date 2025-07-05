@@ -10,10 +10,10 @@ print("matplotlib imported successfully!")
 import tqdm
 print("tqdm imported successfully!")
 
-from PIL import Image 
+from PIL import Image
 print("Pillow (PIL) imported successfully!")
 
-import cv2 
+import cv2
 print("opencv-python (cv2) imported successfully!")
 
 import numpy as np
@@ -26,7 +26,7 @@ if torch.cuda.is_available():
 else:
     print("PyTorch is CPU enabled.")
     print("CUDA is not available, or PyTorch is not configured to use it.")
-    
+
 import torch
 print("torch imported successfully!")
 
@@ -39,10 +39,10 @@ print("matplotlib imported successfully!")
 import tqdm
 print("tqdm imported successfully!")
 
-from PIL import Image 
+from PIL import Image
 print("Pillow (PIL) imported successfully!")
 
-import cv2 
+import cv2
 print("opencv-python (cv2) imported successfully!")
 
 import numpy as np
