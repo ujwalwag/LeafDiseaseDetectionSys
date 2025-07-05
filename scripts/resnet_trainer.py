@@ -213,12 +213,12 @@ def plot_graphs(history, num_epochs):
 
 def plot_confusion_matrix(true_labels, predicted_labels, class_names):
     cm = confusion_matrix(true_labels, predicted_labels)
-    plt.figure(figsize=(12, 10)) # Increased figure size for better readability with more classes
+    plt.figure(figsize=(12, 10)) 
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=class_names, yticklabels=class_names)
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
     plt.title('Confusion Matrix')
-    plt.tight_layout() # Adjust layout to prevent labels from overlapping
+    plt.tight_layout()
     plt.show()
 
 def plot_per_class_accuracy(true_labels, predicted_labels, class_names):
@@ -235,7 +235,7 @@ def plot_per_class_accuracy(true_labels, predicted_labels, class_names):
     class_names_sorted = [item[0] for item in sorted_accuracies]
     accuracy_values_sorted = [item[1] for item in sorted_accuracies]
 
-    plt.figure(figsize=(10, 12)) # Increased figure size for more classes
+    plt.figure(figsize=(10, 12)) 
     plt.barh(class_names_sorted, accuracy_values_sorted, color='skyblue')
     plt.xlabel('Accuracy')
     plt.title('Per-Class Accuracy')
@@ -246,7 +246,7 @@ def plot_per_class_accuracy(true_labels, predicted_labels, class_names):
 
 
 if __name__ == "__main__":
-    # Use all classes instead of random selection
+    
     selected_classes = ALL_CLASS_LABELS
     print(f"Training on all {len(selected_classes)} classes.")
 

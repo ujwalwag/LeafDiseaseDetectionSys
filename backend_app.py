@@ -5,10 +5,10 @@ from torchvision import transforms, models
 from PIL import Image
 import os
 import io
-# Explicitly import classes from transformers
+
 from transformers import ViTFeatureExtractor, ViTForImageClassification 
 
-# Import your LLM description generator script from the 'scripts' directory
+
 try:
     from scripts import desc_llm as llm_description_generator
 except ImportError:
@@ -18,7 +18,7 @@ except ImportError:
 
 app = Flask(__name__)
 
-# --- Configuration Constants (Copied from your app.py) ---
+
 IMG_HEIGHT_RESNET_VIT, IMG_WIDTH_RESNET_VIT = 224, 224
 IMG_HEIGHT_INCEPTION, IMG_WIDTH_INCEPTION = 299, 299
 
@@ -46,23 +46,21 @@ NUM_CLASSES = len(EFFECTIVE_CLASS_LABELS_TRAINED)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
-# --- MODEL PATHS CONFIGURATION (Updated based on provided directory image) ---
 MODEL_PATHS_CONFIG = {
-    # These models appear to be directly in the root directory
+    
     "ResNet50": "best_resnet50_plant_disease_model_all_classes.pth",
     "InceptionV3": "best_inceptionv3_plant_disease_model.pth",
-    "ViT": "fine_tuned_vit_model.pth", # Assuming this is the 'wambugu' pre-trained ViT
-    # This model is in the 'trained_models' subdirectory
+    "ViT": "fine_tuned_vit_model.pth", 
+
     "Custom ViT": "best_custom_vit_model.pth"
 }
 
-# --- Global variables for loaded model and preprocessor (loaded once on server startup) ---
-# Dictionary to hold loaded models for quick switching
+
 loaded_models = {}
 loaded_feature_extractors = {}
 loaded_transforms = {}
 
-# --- Model Architectures (Copied from your app.py) ---
+
 def get_resnet50_model(num_classes_model):
     model = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
     for param in model.parameters():
@@ -83,7 +81,7 @@ def get_inceptionv3_model(num_classes_model):
     return model
 
 def get_vit_model(num_classes_model):
-    # Use ViTForImageClassification directly
+ 
     model = ViTForImageClassification.from_pretrained(
         'wambugu1738/crop_leaf_diseases_vit',
         ignore_mismatched_sizes=True
@@ -93,7 +91,7 @@ def get_vit_model(num_classes_model):
     return model
 
 def get_custom_vit_model(num_classes_model):
-    # Use ViTForImageClassification directly
+ 
     model = ViTForImageClassification.from_pretrained(
         'google/vit-base-patch16-224',
         num_labels=num_classes_model,
@@ -104,7 +102,7 @@ def get_custom_vit_model(num_classes_model):
          model.classifier = nn.Linear(in_features, num_classes_model)
     return model
 
-# --- Model Loading on Server Startup ---
+
 def load_all_models():
     print("Loading all models on server startup...")
     for model_type, model_path in MODEL_PATHS_CONFIG.items():
@@ -129,11 +127,11 @@ def load_all_models():
                 ])
             elif model_type == "ViT":
                 model_instance = get_vit_model(NUM_CLASSES)
-                # Use ViTFeatureExtractor directly
+
                 feature_extractor_instance = ViTFeatureExtractor.from_pretrained('wambugu71/crop_leaf_diseases_vit')
             elif model_type == "Custom ViT":
                 model_instance = get_custom_vit_model(NUM_CLASSES)
-                # Use ViTFeatureExtractor directly
+        
                 feature_extractor_instance = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
             
             if model_instance:
@@ -154,14 +152,13 @@ def load_all_models():
             print(f"Error loading {model_type} from {model_path}: {e}")
             print("Please ensure the model file exists and matches the architecture.")
 
-# Call this function to load models when the app starts
+
 with app.app_context():
     load_all_models()
 
-# --- Routes ---
 @app.route('/')
 def index():
-    # This route serves the HTML page
+
     return render_template('index.html', model_options=list(MODEL_PATHS_CONFIG.keys()))
 
 @app.route('/predict', methods=['POST'])
@@ -181,16 +178,16 @@ def predict():
     current_preprocess_transform = loaded_transforms[model_type]
 
     try:
-        # Read image from stream
+ 
         image_bytes = file.read()
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
-        # Preprocess image based on model type
+       
         input_batch = None
-        if current_feature_extractor: # For ViT models
+        if current_feature_extractor: 
             input_tensor = current_feature_extractor(images=image, return_tensors="pt")
             input_batch = input_tensor['pixel_values']
-        elif current_preprocess_transform: # For ResNet/InceptionV3
+        elif current_preprocess_transform: 
             input_tensor = current_preprocess_transform(image)
             input_batch = input_tensor.unsqueeze(0)
         else:
@@ -214,7 +211,7 @@ def predict():
         predicted_class_label = EFFECTIVE_CLASS_LABELS_TRAINED[predicted_class_index.item()]
         confidence = predicted_prob.item() * 100
 
-        # Generate description using LLM (if available)
+      
         description = "LLM description generator not available. Check server setup."
         if llm_description_generator:
             description = llm_description_generator.generate_llm_description(predicted_class_label)
@@ -230,10 +227,8 @@ def predict():
         return jsonify({'error': f'Prediction failed: {e}'}), 500
 
 if __name__ == '__main__':
-    # Create the 'templates' folder if it doesn't exist
-    # This assumes 'templates' is in the same directory as backend_app.py
+
     if not os.path.exists('templates'):
         os.makedirs('templates')
     
-    # Run the Flask app
     app.run(debug=True, host='0.0.0.0', port=5000)

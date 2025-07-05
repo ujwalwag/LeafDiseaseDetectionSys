@@ -8,18 +8,16 @@ from tkinter import ttk
 import os
 import threading
 
-# Try importing the LLM description generator script with the new name
 try:
-    import desc_llm as llm_description_generator # Renamed import
+    import desc_llm as llm_description_generator 
 except ImportError:
     print("Error: Could not import 'desc_llm.py'.")
     print("Please ensure 'desc_llm.py' is in the same directory as 'app.py'.")
     llm_description_generator = None
 
-# Import the entire transformers module for explicit referencing
 import transformers
 
-# --- Configuration Constants ---
+
 IMG_HEIGHT_RESNET_VIT, IMG_WIDTH_RESNET_VIT = 224, 224
 IMG_HEIGHT_INCEPTION, IMG_WIDTH_INCEPTION = 299, 299
 
@@ -263,8 +261,8 @@ def switch_model(*args):
 
 app = tk.Tk()
 app.title("Plant Disease Detector")
-app.geometry("1400x1000") # Increased default size
-app.resizable(True, True) # Made resizable
+app.geometry("1400x1000") 
+app.resizable(True, True) 
 
 style = ttk.Style(app)
 style.theme_use('clam')
@@ -274,9 +272,9 @@ style.configure('TLabel', background='#f0f0f0', foreground='#333333', font=('Ari
 
 style.configure('Title.TLabel', font=("Arial", 24, "bold"), foreground='#333333')
 style.configure('ModelSelect.TLabel', font=('Arial', 14, 'bold'), foreground='#333333')
-style.configure('Result.TLabel', font=("Arial", 18, "bold"), foreground='#333333', wraplength=1200) # Increased wraplength
+style.configure('Result.TLabel', font=("Arial", 18, "bold"), foreground='#333333', wraplength=1200) 
 style.configure('Confidence.TLabel', font=("Arial", 20, "bold"), background='#F0F8FF', relief='flat', borderwidth=0, padding=(10, 5))
-style.configure('Description.TLabel', font=("Arial", 12, "italic"), foreground='#555555', wraplength=1200) # Increased wraplength
+style.configure('Description.TLabel', font=("Arial", 12, "italic"), foreground='#555555', wraplength=1200) 
 
 style.configure('TButton', font=('Arial', 12, 'bold'), background='#4CAF50', foreground='white', relief='flat')
 style.map('TButton', background=[('active', '#45a049')])
