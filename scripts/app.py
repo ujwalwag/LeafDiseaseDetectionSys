@@ -8,7 +8,6 @@ from tkinter import ttk
 import os
 import threading
 
-# Try importing the LLM description generator script with the new name
 try:
     import desc_llm as llm_description_generator # Renamed import
 except ImportError:
@@ -97,14 +96,13 @@ def get_custom_vit_model(num_classes_model):
          model.classifier = nn.Linear(in_features, num_classes_model)
     return model.to(device)
 
-
 def load_and_setup_model(model_type, model_path):
     global current_model, current_preprocess_transform, current_feature_extractor
 
     current_model = None
     current_preprocess_transform = None
     current_feature_extractor = None
-    
+
     result_label.config(text="Loading model...")
     style.configure('Result.TLabel', foreground='blue')
     confidence_label.config(text="")
@@ -166,7 +164,6 @@ def load_and_setup_model(model_type, model_path):
 def preprocess_image_for_prediction(image_path):
     try:
         image = Image.open(image_path).convert("RGB")
-
         if current_feature_extractor:
             input_tensor = current_feature_extractor(images=image, return_tensors="pt")
             input_batch = input_tensor['pixel_values']
@@ -175,7 +172,6 @@ def preprocess_image_for_prediction(image_path):
             input_batch = input_tensor.unsqueeze(0)
         else:
             raise ValueError("No preprocessing method available. Model not loaded correctly.")
-
         return input_batch.to(device), image
     except Exception as e:
         print(f"Error processing image {image_path}: {e}")
@@ -188,26 +184,19 @@ def update_description_label(description):
 def display_image_in_tkinter(image_pil, predicted_class_label, confidence_score):
     display_size = (300, 300)
     img_display = image_pil.resize(display_size, Image.Resampling.LANCZOS)
-    
     img_tk = ImageTk.PhotoImage(img_display)
-
     image_label.config(image=img_tk)
-    image_label.image = img_tk 
-
+    image_label.image = img_tk
     result_label.config(text=f"Predicted: {predicted_class_label}")
     style.configure('Result.TLabel', foreground='#333333')
-    
     confidence_label.config(text=f"Confidence: {confidence_score:.2f}%")
     style.configure('Confidence.TLabel', foreground='#006400')
-    
     disease_description_label.config(text="Generating description...")
     style.configure('Description.TLabel', foreground='#888888')
-    
     if llm_description_generator:
         threading.Thread(target=lambda: app.after(0, update_description_label, llm_description_generator.generate_llm_description(predicted_class_label))).start()
     else:
         update_description_label("LLM description generator not available. Check script setup.")
-
 
 def upload_and_predict():
     if current_model is None:
@@ -216,11 +205,9 @@ def upload_and_predict():
         confidence_label.config(text="")
         disease_description_label.config(text="")
         return
-
     file_path = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg;*.jpeg;*.png")])
     if not file_path:
-        return 
-
+        return
     input_image_tensor, original_pil_image = preprocess_image_for_prediction(file_path)
 
     if input_image_tensor is None:
@@ -231,16 +218,16 @@ def upload_and_predict():
         return
 
     try:
-        with torch.no_grad(): 
+        with torch.no_grad():
             model_output = current_model(input_image_tensor)
-            
+
             if hasattr(model_output, 'logits'):
                 logits = model_output.logits
             elif isinstance(model_output, tuple):
                 logits = model_output[0]
             else:
                 logits = model_output
-            
+
             probabilities = torch.nn.functional.softmax(logits, dim=1)
             predicted_prob, predicted_class_index = torch.max(probabilities, 1)
 
@@ -302,23 +289,19 @@ model_dropdown = ttk.OptionMenu(main_frame, model_selection_var, model_options[0
 model_dropdown.config(width=20)
 model_dropdown.pack(pady=(0, 20))
 
-upload_button = ttk.Button(main_frame, text="Upload Image for Detection", command=upload_and_predict,
-                           style='TButton')
+upload_button = ttk.Button(main_frame, text="Upload Image for Detection", command=upload_and_predict, style='TButton')
 upload_button.pack(pady=20)
 
 image_label = ttk.Label(main_frame, background="#ffffff", relief="solid", borderwidth=1)
 image_label.pack(pady=10, ipadx=5, ipady=5)
 
-result_label = ttk.Label(main_frame, text="Select a model and upload an image...",
-                         style='Result.TLabel', anchor="center")
-result_label.pack(pady=(10, 5)) 
+result_label = ttk.Label(main_frame, text="Select a model and upload an image...", style='Result.TLabel', anchor="center")
+result_label.pack(pady=(10, 5))
 
-confidence_label = ttk.Label(main_frame, text="",
-                             style='Confidence.TLabel', relief="ridge", borderwidth=2)
-confidence_label.pack(pady=(5, 10)) 
+confidence_label = ttk.Label(main_frame, text="", style='Confidence.TLabel', relief="ridge", borderwidth=2)
+confidence_label.pack(pady=(5, 10))
 
-disease_description_label = ttk.Label(main_frame, text="",
-                                      style='Description.TLabel', justify=tk.CENTER, anchor="center")
+disease_description_label = ttk.Label(main_frame, text="", style='Description.TLabel', justify=tk.CENTER, anchor="center")
 disease_description_label.pack(pady=(10, 0))
 
 switch_model()
