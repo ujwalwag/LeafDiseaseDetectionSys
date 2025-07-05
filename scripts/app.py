@@ -78,7 +78,6 @@ def get_inceptionv3_model(num_classes_model):
     return model.to(device)
 
 def get_vit_model(num_classes_model):
-    # Use transformers.ViTForImageClassification
     model = transformers.ViTForImageClassification.from_pretrained(
         'wambugu1738/crop_leaf_diseases_vit',
         ignore_mismatched_sizes=True
@@ -88,7 +87,6 @@ def get_vit_model(num_classes_model):
     return model.to(device)
 
 def get_custom_vit_model(num_classes_model):
-    # Use transformers.ViTForImageClassification
     model = transformers.ViTForImageClassification.from_pretrained(
         'google/vit-base-patch16-224',
         num_labels=num_classes_model,
@@ -130,12 +128,10 @@ def load_and_setup_model(model_type, model_path):
             ])
         elif model_type == "ViT":
             current_model = get_vit_model(NUM_CLASSES)
-            # Use transformers.ViTFeatureExtractor
             current_feature_extractor = transformers.ViTFeatureExtractor.from_pretrained('wambugu71/crop_leaf_diseases_vit')
             current_preprocess_transform = None
         elif model_type == "Custom ViT":
             current_model = get_custom_vit_model(NUM_CLASSES)
-            # Use transformers.ViTFeatureExtractor
             current_feature_extractor = transformers.ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
             current_preprocess_transform = None
         else:
@@ -152,7 +148,8 @@ def load_and_setup_model(model_type, model_path):
             style.configure('Result.TLabel', foreground='green')
             print(f"Model loaded successfully from {model_path}")
         else:
-            result_label.config(text=f"Error: Model file '{os.path.basename(model_path)}' not found.", fg="red")
+            result_label.config(text=f"Error: Model file '{os.path.basename(model_path)}' not found.")
+            style.configure('Result.TLabel', foreground='red')
             print(f"Error: Model file '{model_path}' not found.")
             current_model = None
             current_feature_extractor = None
@@ -171,7 +168,6 @@ def preprocess_image_for_prediction(image_path):
         image = Image.open(image_path).convert("RGB")
 
         if current_feature_extractor:
-            # Use transformers.ViTFeatureExtractor
             input_tensor = current_feature_extractor(images=image, return_tensors="pt")
             input_batch = input_tensor['pixel_values']
         elif current_preprocess_transform:
@@ -267,8 +263,8 @@ def switch_model(*args):
 
 app = tk.Tk()
 app.title("Plant Disease Detector")
-app.geometry("700x1000")
-app.resizable(False, False)
+app.geometry("1400x1000") # Increased default size
+app.resizable(True, True) # Made resizable
 
 style = ttk.Style(app)
 style.theme_use('clam')
@@ -278,9 +274,9 @@ style.configure('TLabel', background='#f0f0f0', foreground='#333333', font=('Ari
 
 style.configure('Title.TLabel', font=("Arial", 24, "bold"), foreground='#333333')
 style.configure('ModelSelect.TLabel', font=('Arial', 14, 'bold'), foreground='#333333')
-style.configure('Result.TLabel', font=("Arial", 18, "bold"), foreground='#333333', wraplength=600)
+style.configure('Result.TLabel', font=("Arial", 18, "bold"), foreground='#333333', wraplength=1200) # Increased wraplength
 style.configure('Confidence.TLabel', font=("Arial", 20, "bold"), background='#F0F8FF', relief='flat', borderwidth=0, padding=(10, 5))
-style.configure('Description.TLabel', font=("Arial", 12, "italic"), foreground='#555555', wraplength=600)
+style.configure('Description.TLabel', font=("Arial", 12, "italic"), foreground='#555555', wraplength=1200) # Increased wraplength
 
 style.configure('TButton', font=('Arial', 12, 'bold'), background='#4CAF50', foreground='white', relief='flat')
 style.map('TButton', background=[('active', '#45a049')])
