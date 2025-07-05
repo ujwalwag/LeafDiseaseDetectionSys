@@ -4,9 +4,22 @@ from torchvision import transforms, models
 from PIL import Image, ImageTk
 import tkinter as tk
 from tkinter import filedialog, Label, Button, PhotoImage, OptionMenu, StringVar
+from tkinter import ttk
 import os
-from transformers import ViTFeatureExtractor, ViTForImageClassification
+import threading
 
+# Try importing the LLM description generator script with the new name
+try:
+    import desc_llm as llm_description_generator # Renamed import
+except ImportError:
+    print("Error: Could not import 'desc_llm.py'.")
+    print("Please ensure 'desc_llm.py' is in the same directory as 'app.py'.")
+    llm_description_generator = None
+
+# Import the entire transformers module for explicit referencing
+import transformers
+
+# --- Configuration Constants ---
 IMG_HEIGHT_RESNET_VIT, IMG_WIDTH_RESNET_VIT = 224, 224
 IMG_HEIGHT_INCEPTION, IMG_WIDTH_INCEPTION = 299, 299
 
@@ -37,7 +50,8 @@ print(f"Using device: {device}")
 MODEL_PATHS_CONFIG = {
     "ResNet50": "best_resnet50_plant_disease_model_all_classes.pth",
     "InceptionV3": "best_inceptionv3_plant_disease_model.pth",
-    "ViT": "fine_tuned_vit_model.pth"
+    "ViT": "fine_tuned_vit_model.pth",
+    "Custom ViT": "best_custom_vit_model.pth"
 }
 
 current_model = None
@@ -53,7 +67,7 @@ def get_resnet50_model(num_classes_model):
     return model.to(device)
 
 def get_inceptionv3_model(num_classes_model):
-    model = models.inception_v3(weights=models.InceptionV3_Weights.IMAGENET1K_V1, transform_input=True)
+    model = models.inception_v3(pretrained=True, transform_input=True)
     for param in model.parameters():
         param.requires_grad = False
     num_ftrs_main = model.fc.in_features
@@ -64,13 +78,27 @@ def get_inceptionv3_model(num_classes_model):
     return model.to(device)
 
 def get_vit_model(num_classes_model):
-    model = ViTForImageClassification.from_pretrained(
+    # Use transformers.ViTForImageClassification
+    model = transformers.ViTForImageClassification.from_pretrained(
         'wambugu1738/crop_leaf_diseases_vit',
         ignore_mismatched_sizes=True
     )
     in_features = model.classifier.in_features
     model.classifier = nn.Linear(in_features, num_classes_model)
     return model.to(device)
+
+def get_custom_vit_model(num_classes_model):
+    # Use transformers.ViTForImageClassification
+    model = transformers.ViTForImageClassification.from_pretrained(
+        'google/vit-base-patch16-224',
+        num_labels=num_classes_model,
+        ignore_mismatched_sizes=True
+    )
+    if not isinstance(model.classifier, nn.Linear):
+         in_features = model.classifier.in_features if hasattr(model.classifier, 'in_features') else model.config.hidden_size
+         model.classifier = nn.Linear(in_features, num_classes_model)
+    return model.to(device)
+
 
 def load_and_setup_model(model_type, model_path):
     global current_model, current_preprocess_transform, current_feature_extractor
@@ -79,8 +107,10 @@ def load_and_setup_model(model_type, model_path):
     current_preprocess_transform = None
     current_feature_extractor = None
     
-    result_label.config(text="Loading model...", fg="blue")
-    confidence_label.config(text="", relief=tk.FLAT, bd=0)
+    result_label.config(text="Loading model...")
+    style.configure('Result.TLabel', foreground='blue')
+    confidence_label.config(text="")
+    disease_description_label.config(text="")
     image_label.config(image=None)
 
     try:
@@ -100,10 +130,17 @@ def load_and_setup_model(model_type, model_path):
             ])
         elif model_type == "ViT":
             current_model = get_vit_model(NUM_CLASSES)
-            current_feature_extractor = ViTFeatureExtractor.from_pretrained('wambugu71/crop_leaf_diseases_vit')
+            # Use transformers.ViTFeatureExtractor
+            current_feature_extractor = transformers.ViTFeatureExtractor.from_pretrained('wambugu71/crop_leaf_diseases_vit')
+            current_preprocess_transform = None
+        elif model_type == "Custom ViT":
+            current_model = get_custom_vit_model(NUM_CLASSES)
+            # Use transformers.ViTFeatureExtractor
+            current_feature_extractor = transformers.ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
             current_preprocess_transform = None
         else:
-            result_label.config(text="Invalid model type selected.", fg="red")
+            result_label.config(text="Invalid model type selected.")
+            style.configure('Result.TLabel', foreground='red')
             return
 
         print(f"Attempting to load {model_type} model from: {os.path.abspath(model_path)}")
@@ -111,17 +148,19 @@ def load_and_setup_model(model_type, model_path):
         if os.path.exists(model_path):
             current_model.load_state_dict(torch.load(model_path, map_location=device))
             current_model.eval()
-            result_label.config(text=f"{model_type} loaded successfully!", fg="green")
+            result_label.config(text=f"{model_type} loaded successfully!")
+            style.configure('Result.TLabel', foreground='green')
             print(f"Model loaded successfully from {model_path}")
         else:
             result_label.config(text=f"Error: Model file '{os.path.basename(model_path)}' not found.", fg="red")
             print(f"Error: Model file '{model_path}' not found.")
             current_model = None
             current_feature_extractor = None
-            print("Please ensure the model file exists in the same directory as this script, or update MODEL_SAVE_PATH.")
+            print("Please ensure the model file exists in the same directory as this script, or update MODEL_PATHS_CONFIG.")
 
     except Exception as e:
-        result_label.config(text=f"Error loading {model_type}: {e}", fg="red")
+        result_label.config(text=f"Error loading {model_type}: {e}")
+        style.configure('Result.TLabel', foreground='red')
         print(f"Error loading {model_type} from {model_path}: {e}")
         current_model = None
         current_feature_extractor = None
@@ -132,6 +171,7 @@ def preprocess_image_for_prediction(image_path):
         image = Image.open(image_path).convert("RGB")
 
         if current_feature_extractor:
+            # Use transformers.ViTFeatureExtractor
             input_tensor = current_feature_extractor(images=image, return_tensors="pt")
             input_batch = input_tensor['pixel_values']
         elif current_preprocess_transform:
@@ -145,6 +185,10 @@ def preprocess_image_for_prediction(image_path):
         print(f"Error processing image {image_path}: {e}")
         return None, None
 
+def update_description_label(description):
+    disease_description_label.config(text=description)
+    style.configure('Description.TLabel', foreground='#555555')
+
 def display_image_in_tkinter(image_pil, predicted_class_label, confidence_score):
     display_size = (300, 300)
     img_display = image_pil.resize(display_size, Image.Resampling.LANCZOS)
@@ -154,16 +198,27 @@ def display_image_in_tkinter(image_pil, predicted_class_label, confidence_score)
     image_label.config(image=img_tk)
     image_label.image = img_tk 
 
-    result_label.config(text=f"Predicted: {predicted_class_label}", fg="#333333", font=("Arial", 16, "bold"))
+    result_label.config(text=f"Predicted: {predicted_class_label}")
+    style.configure('Result.TLabel', foreground='#333333')
     
-    confidence_label.config(text=f"Confidence: {confidence_score:.2f}%", 
-                            fg="#006400", font=("Arial", 20, "bold"),
-                            relief=tk.RIDGE, bd=2, padx=10, pady=5) 
+    confidence_label.config(text=f"Confidence: {confidence_score:.2f}%")
+    style.configure('Confidence.TLabel', foreground='#006400')
+    
+    disease_description_label.config(text="Generating description...")
+    style.configure('Description.TLabel', foreground='#888888')
+    
+    if llm_description_generator:
+        threading.Thread(target=lambda: app.after(0, update_description_label, llm_description_generator.generate_llm_description(predicted_class_label))).start()
+    else:
+        update_description_label("LLM description generator not available. Check script setup.")
+
 
 def upload_and_predict():
     if current_model is None:
-        result_label.config(text="No model loaded. Please select and load a model.", fg="red")
-        confidence_label.config(text="", relief=tk.FLAT, bd=0)
+        result_label.config(text="No model loaded. Please select and load a model.")
+        style.configure('Result.TLabel', foreground='red')
+        confidence_label.config(text="")
+        disease_description_label.config(text="")
         return
 
     file_path = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg;*.jpeg;*.png")])
@@ -173,8 +228,10 @@ def upload_and_predict():
     input_image_tensor, original_pil_image = preprocess_image_for_prediction(file_path)
 
     if input_image_tensor is None:
-        result_label.config(text="Error processing image.", fg="red")
-        confidence_label.config(text="", relief=tk.FLAT, bd=0)
+        result_label.config(text="Error processing image.")
+        style.configure('Result.TLabel', foreground='red')
+        confidence_label.config(text="")
+        disease_description_label.config(text="")
         return
 
     try:
@@ -198,8 +255,10 @@ def upload_and_predict():
 
     except Exception as e:
         print(f"Error during prediction: {e}")
-        result_label.config(text=f"Prediction Error: {e}", fg="red")
-        confidence_label.config(text="", relief=tk.FLAT, bd=0)
+        result_label.config(text=f"Prediction Error: {e}")
+        style.configure('Result.TLabel', foreground='red')
+        confidence_label.config(text="")
+        disease_description_label.config(text="")
 
 def switch_model(*args):
     selected_model_type = model_selection_var.get()
@@ -208,48 +267,63 @@ def switch_model(*args):
 
 app = tk.Tk()
 app.title("Plant Disease Detector")
-app.geometry("700x780") 
+app.geometry("700x1000")
 app.resizable(False, False)
-app.configure(bg="#e0e0e0")
 
-font_btn = ("Arial", 14, "bold")
-font_label = ("Arial", 12)
-font_result_main = ("Arial", 18, "bold")
-font_confidence = ("Arial", 20, "bold") 
-font_dropdown = ("Arial", 12)
+style = ttk.Style(app)
+style.theme_use('clam')
 
-title_label = Label(app, text="Leaf Disease Detection System",
-                    font=("Arial", 20, "bold"), bg="#e0e0e0", fg="#333333")
-title_label.pack(pady=20)
+style.configure('TFrame', background='#f0f0f0')
+style.configure('TLabel', background='#f0f0f0', foreground='#333333', font=('Arial', 12))
 
-model_options = ["ResNet50", "InceptionV3", "ViT"]
+style.configure('Title.TLabel', font=("Arial", 24, "bold"), foreground='#333333')
+style.configure('ModelSelect.TLabel', font=('Arial', 14, 'bold'), foreground='#333333')
+style.configure('Result.TLabel', font=("Arial", 18, "bold"), foreground='#333333', wraplength=600)
+style.configure('Confidence.TLabel', font=("Arial", 20, "bold"), background='#F0F8FF', relief='flat', borderwidth=0, padding=(10, 5))
+style.configure('Description.TLabel', font=("Arial", 12, "italic"), foreground='#555555', wraplength=600)
+
+style.configure('TButton', font=('Arial', 12, 'bold'), background='#4CAF50', foreground='white', relief='flat')
+style.map('TButton', background=[('active', '#45a049')])
+
+style.configure('TMenubutton', font=('Arial', 12), background='#cccccc', foreground='#333333', relief='flat')
+style.map('TMenubutton', background=[('active', '#a0a0a0')])
+
+
+main_frame = ttk.Frame(app, padding="20 20 20 20")
+main_frame.pack(fill=tk.BOTH, expand=True)
+
+title_label = ttk.Label(main_frame, text="Leaf Disease Detection System", style='Title.TLabel', anchor="center")
+title_label.pack(pady=(0, 20))
+
+model_options = ["ResNet50", "InceptionV3", "ViT", "Custom ViT"]
 model_selection_var = StringVar(app)
 model_selection_var.set(model_options[0])
 
-model_dropdown_label = Label(app, text="Select Model:", font=font_label, bg="#e0e0e0", fg="#333333")
+model_dropdown_label = ttk.Label(main_frame, text="Select Model:", style='ModelSelect.TLabel')
 model_dropdown_label.pack(pady=(0, 5))
 
-model_dropdown = OptionMenu(app, model_selection_var, *model_options, command=switch_model)
-model_dropdown.config(font=font_dropdown, bg="#cccccc", fg="#333333", activebackground="#a0a0a0")
-model_dropdown.pack(pady=(0, 10))
+model_dropdown = ttk.OptionMenu(main_frame, model_selection_var, model_options[0], *model_options, command=switch_model)
+model_dropdown.config(width=20)
+model_dropdown.pack(pady=(0, 20))
 
-upload_button = Button(app, text="Upload Image for Detection", command=upload_and_predict,
-                        font=font_btn, bg="#4CAF50", fg="white",
-                        activebackground="#45a049", activeforeground="white",
-                        relief=tk.RAISED, bd=3)
+upload_button = ttk.Button(main_frame, text="Upload Image for Detection", command=upload_and_predict,
+                           style='TButton')
 upload_button.pack(pady=20)
 
-image_label = Label(app, bg="#ffffff", bd=2, relief=tk.SUNKEN)
-image_label.pack(pady=10)
+image_label = ttk.Label(main_frame, background="#ffffff", relief="solid", borderwidth=1)
+image_label.pack(pady=10, ipadx=5, ipady=5)
 
-result_label = Label(app, text="Select a model and upload an image...",
-                      font=font_result_main, bg="#e0e0e0", fg="#333333", wraplength=600)
-result_label.pack(pady=10) 
+result_label = ttk.Label(main_frame, text="Select a model and upload an image...",
+                         style='Result.TLabel', anchor="center")
+result_label.pack(pady=(10, 5)) 
 
-confidence_label = Label(app, text="",
-                         font=font_confidence, bg="#F0F8FF", fg="#006400", 
-                         relief=tk.RIDGE, bd=2, padx=10, pady=5) 
-confidence_label.pack(pady=10) 
+confidence_label = ttk.Label(main_frame, text="",
+                             style='Confidence.TLabel', relief="ridge", borderwidth=2)
+confidence_label.pack(pady=(5, 10)) 
+
+disease_description_label = ttk.Label(main_frame, text="",
+                                      style='Description.TLabel', justify=tk.CENTER, anchor="center")
+disease_description_label.pack(pady=(10, 0))
 
 switch_model()
 
