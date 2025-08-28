@@ -108,4 +108,4 @@ LEAFDISEASEDETECTIONSYS/
 
 ---
 
-
+Read the Project Report here : https://github.com/ujwalwag/LeafDiseaseDetectionSys/blob/main/project_report_ujwalwag_skola_vranasho%20(2).pdf
