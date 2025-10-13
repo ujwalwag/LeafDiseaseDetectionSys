@@ -2,7 +2,7 @@ import requests
 import json
 
 
-GEMINI_API_KEY = "AIzaSyB0vHx2Aphx3bJ_iny_sUS1EvOYOpu9IZ4" 
+GEMINI_API_KEY = "Your_API_Key" 
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 
 def generate_llm_description(predicted_class_label):
