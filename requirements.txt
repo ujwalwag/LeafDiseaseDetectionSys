@@ -1,0 +1,10 @@
+# CPU wheels (fits Render’s CPU instances; smaller than default CUDA builds)
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+flask==3.0.3
+gunicorn==23.0.0
+torch==2.4.1+cpu
+torchvision==0.19.1+cpu
+transformers==4.46.3
+pillow==10.4.0
+requests==2.32.3

@@ -1,0 +1,12 @@
+venv/
+.venv/
+
+# Dataset images (large; do not commit)
+PlantVillage-Dataset-Downloaded/**/*.jpg
+PlantVillage-Dataset-Downloaded/**/*.jpeg
+PlantVillage-Dataset-Downloaded/**/*.JPG
+PlantVillage-Dataset-Downloaded/**/*.JPEG
+PlantVillage_Organized_Processed_Dataset/**/*.jpg
+PlantVillage_Organized_Processed_Dataset/**/*.jpeg
+PlantVillage_Organized_Processed_Dataset/**/*.JPG
+PlantVillage_Organized_Processed_Dataset/**/*.JPEG

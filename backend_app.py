@@ -43,6 +43,23 @@ EFFECTIVE_CLASS_LABELS_TRAINED = [
 ]
 NUM_CLASSES = len(EFFECTIVE_CLASS_LABELS_TRAINED)
 
+
+def grouped_class_labels_for_ui(labels):
+    """Group trained class names by crop for the web UI (PlantVillage-style labels)."""
+    buckets = {}
+    for raw in labels:
+        crop_part, sep, condition_part = raw.partition("___")
+        if not sep:
+            buckets.setdefault("Other", []).append(raw.replace("_", " "))
+            continue
+        crop_display = crop_part.replace("_", " ").strip()
+        condition_display = condition_part.replace("_", " ").strip()
+        buckets.setdefault(crop_display, []).append(condition_display)
+    for crop in buckets:
+        buckets[crop] = sorted(set(buckets[crop]), key=str.casefold)
+    return sorted(buckets.items(), key=lambda x: x[0].casefold())
+
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
@@ -158,8 +175,13 @@ with app.app_context():
 
 @app.route('/')
 def index():
-
-    return render_template('index.html', model_options=list(MODEL_PATHS_CONFIG.keys()))
+    class_groups = grouped_class_labels_for_ui(EFFECTIVE_CLASS_LABELS_TRAINED)
+    return render_template(
+        'index.html',
+        model_options=list(MODEL_PATHS_CONFIG.keys()),
+        class_groups=class_groups,
+        num_classes=NUM_CLASSES,
+    )
 
 @app.route('/predict', methods=['POST'])
 def predict():
