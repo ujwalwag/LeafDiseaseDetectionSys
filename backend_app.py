@@ -1,10 +1,13 @@
 from flask import Flask, request, jsonify, render_template
+import gc
+import io
+import os
+import threading
+
 import torch
 import torch.nn as nn
-from torchvision import transforms, models
 from PIL import Image
-import os
-import io
+from torchvision import transforms, models
 
 from transformers import ViTFeatureExtractor, ViTForImageClassification 
 
@@ -77,6 +80,101 @@ loaded_models = {}
 loaded_feature_extractors = {}
 loaded_transforms = {}
 
+_load_lock = threading.Lock()
+
+
+def model_types_with_weights():
+    """Model types whose .pth file exists (safe to offer in the UI)."""
+    return [k for k, path in MODEL_PATHS_CONFIG.items() if os.path.isfile(path)]
+
+
+def _purge_loaded_model(model_type):
+    m = loaded_models.pop(model_type, None)
+    loaded_feature_extractors.pop(model_type, None)
+    loaded_transforms.pop(model_type, None)
+    if m is not None:
+        del m
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
+def _instantiate_model_components(model_type):
+    """Build architecture, transforms, and feature extractors (weights not loaded yet)."""
+    model_instance = None
+    feature_extractor_instance = None
+    transform_instance = None
+
+    if model_type == "ResNet50":
+        model_instance = get_resnet50_model(NUM_CLASSES)
+        transform_instance = transforms.Compose([
+            transforms.Resize((IMG_HEIGHT_RESNET_VIT, IMG_WIDTH_RESNET_VIT)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ])
+    elif model_type == "InceptionV3":
+        model_instance = get_inceptionv3_model(NUM_CLASSES)
+        transform_instance = transforms.Compose([
+            transforms.Resize((IMG_HEIGHT_INCEPTION, IMG_WIDTH_INCEPTION)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ])
+    elif model_type == "ViT":
+        model_instance = get_vit_model(NUM_CLASSES)
+        feature_extractor_instance = ViTFeatureExtractor.from_pretrained("wambugu71/crop_leaf_diseases_vit")
+    elif model_type == "Custom ViT":
+        model_instance = get_custom_vit_model(NUM_CLASSES)
+        feature_extractor_instance = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
+    else:
+        raise ValueError(f"Unknown model type: {model_type}")
+
+    return model_instance, feature_extractor_instance, transform_instance
+
+
+def ensure_model_loaded(model_type):
+    """
+    Load exactly one model into memory for inference. Unloads any other loaded model first
+    to keep memory bounded (e.g. Render free tier ~512Mi).
+    Returns (ok, error_message).
+    """
+    if model_type not in MODEL_PATHS_CONFIG:
+        return False, "Invalid model type."
+
+    model_path = MODEL_PATHS_CONFIG[model_type]
+    if not os.path.isfile(model_path):
+        return False, f"Model weights file not found: {model_path}"
+
+    with _load_lock:
+        if model_type in loaded_models:
+            for other in list(loaded_models.keys()):
+                if other != model_type:
+                    _purge_loaded_model(other)
+            return True, None
+
+        for other in list(loaded_models.keys()):
+            _purge_loaded_model(other)
+
+        components = None
+        try:
+            components = _instantiate_model_components(model_type)
+            model_instance, feature_extractor_instance, transform_instance = components
+            state = torch.load(model_path, map_location=device)
+            model_instance.load_state_dict(state)
+            model_instance.eval()
+            model_instance.to(device)
+            loaded_models[model_type] = model_instance
+            loaded_feature_extractors[model_type] = feature_extractor_instance
+            loaded_transforms[model_type] = transform_instance
+            print(f"Lazy-loaded {model_type} from {model_path}")
+            return True, None
+        except Exception as e:
+            print(f"Error lazy-loading {model_type}: {e}")
+            if components is not None:
+                mi, fe, tr = components
+                del mi, fe, tr
+            gc.collect()
+            return False, str(e)
+
 
 def get_resnet50_model(num_classes_model):
     model = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
@@ -120,65 +218,15 @@ def get_custom_vit_model(num_classes_model):
     return model
 
 
-def load_all_models():
-    print("Loading all models on server startup...")
-    for model_type, model_path in MODEL_PATHS_CONFIG.items():
-        try:
-            model_instance = None
-            feature_extractor_instance = None
-            transform_instance = None
-
-            if model_type == "ResNet50":
-                model_instance = get_resnet50_model(NUM_CLASSES)
-                transform_instance = transforms.Compose([
-                    transforms.Resize((IMG_HEIGHT_RESNET_VIT, IMG_WIDTH_RESNET_VIT)),
-                    transforms.ToTensor(),
-                    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-                ])
-            elif model_type == "InceptionV3":
-                model_instance = get_inceptionv3_model(NUM_CLASSES)
-                transform_instance = transforms.Compose([
-                    transforms.Resize((IMG_HEIGHT_INCEPTION, IMG_WIDTH_INCEPTION)),
-                    transforms.ToTensor(),
-                    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-                ])
-            elif model_type == "ViT":
-                model_instance = get_vit_model(NUM_CLASSES)
-
-                feature_extractor_instance = ViTFeatureExtractor.from_pretrained('wambugu71/crop_leaf_diseases_vit')
-            elif model_type == "Custom ViT":
-                model_instance = get_custom_vit_model(NUM_CLASSES)
-        
-                feature_extractor_instance = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
-            
-            if model_instance:
-                if os.path.exists(model_path):
-                    model_instance.load_state_dict(torch.load(model_path, map_location=device))
-                    model_instance.eval()
-                    model_instance.to(device)
-                    loaded_models[model_type] = model_instance
-                    loaded_feature_extractors[model_type] = feature_extractor_instance
-                    loaded_transforms[model_type] = transform_instance
-                    print(f"Successfully loaded {model_type} from {model_path}")
-                else:
-                    print(f"Warning: Model file '{model_path}' for {model_type} not found. Skipping.")
-            else:
-                print(f"Warning: Model instance for {model_type} could not be created. Skipping.")
-
-        except Exception as e:
-            print(f"Error loading {model_type} from {model_path}: {e}")
-            print("Please ensure the model file exists and matches the architecture.")
-
-
-with app.app_context():
-    load_all_models()
-
 @app.route('/')
 def index():
     class_groups = grouped_class_labels_for_ui(EFFECTIVE_CLASS_LABELS_TRAINED)
+    options = model_types_with_weights()
+    if not options:
+        options = list(MODEL_PATHS_CONFIG.keys())
     return render_template(
         'index.html',
-        model_options=list(MODEL_PATHS_CONFIG.keys()),
+        model_options=options,
         class_groups=class_groups,
         num_classes=NUM_CLASSES,
     )
@@ -192,8 +240,12 @@ def predict():
         return jsonify({'error': 'No selected file'}), 400
     
     model_type = request.form.get('model_type')
-    if not model_type or model_type not in loaded_models:
-        return jsonify({'error': 'Invalid or unloaded model type selected'}), 400
+    if not model_type or model_type not in MODEL_PATHS_CONFIG:
+        return jsonify({'error': 'Invalid model type selected'}), 400
+
+    ok, err = ensure_model_loaded(model_type)
+    if not ok:
+        return jsonify({'error': err or 'Could not load model'}), 400
 
     current_model = loaded_models[model_type]
     current_feature_extractor = loaded_feature_extractors[model_type]
