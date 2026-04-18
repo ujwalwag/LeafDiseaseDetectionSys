@@ -1,102 +1,89 @@
-Leaf Disease Detection System
-This project aims to build a Leaf Disease Detection System using deep learning techniques. The system classifies healthy and diseased leaves to help agricultural professionals and enthusiasts identify plant health issues effectively.
+# Leaf Disease Detection System
 
-🌱 Project Structure
-kotlin
-Copy
-Edit
-my_directory/
-│
-├── data/
-│   ├── images/
-│   │   ├── leaf1.jpg
-│   │   └── leaf2.jpg
-│   └── labels/
-│       └── labels.csv
-│
-├── models/
-│   └── cnn_model.h5
-│
-├── scripts/
-│   ├── train_model.py
-│   └── evaluate_model.py
-│
-├── results/
-│   ├── confusion_matrix.png
-│   └── classification_report.txt
-│
-└── README.md
-📂 Folders
-data/
+A web application that classifies plant leaf images into disease or healthy categories using convolutional and vision-transformer models trained on a multi-class setup (PlantVillage-style labels). After a prediction, optional text from a language model describes the predicted condition.
 
-images/ — Contains the raw leaf images used for training and testing.
+## Features
 
-labels/ — Contains the label files (e.g., CSV) mapping images to disease classes.
+- **Web UI** — Upload an image, pick an architecture, and get a label, confidence score, and short description.
+- **Multiple architectures** — ResNet50, InceptionV3, Hugging Face ViT, and a custom fine-tuned ViT (weights permitting).
+- **Lazy loading** — At most **one** full model is kept in memory at a time to reduce RAM use on small hosts (for example, cloud free tiers).
+- **38 classes** — Crops such as apple, tomato, potato, grape, and conditions from healthy to specific diseases (see the app UI for the full list).
 
-models/
+## Project layout
 
-Stores trained deep learning models in .h5 format for future inference.
+| Path | Purpose |
+|------|---------|
+| `backend_app.py` | Flask app, inference routes, lazy loading logic |
+| `app.py` | WSGI entry (`app:app`) for hosts that expect a module named `app` (e.g. Gunicorn on Render) |
+| `templates/` | HTML templates for the web UI |
+| `scripts/` | Training utilities, preprocessing, desktop demo (`app.py` tkinter), ViT helpers |
+| `requirements.txt` | Python dependencies (PyTorch CPU wheels, Flask, Transformers, etc.) |
+| `.python-version` | Suggests Python **3.12** for compatible wheels (e.g. Hugging Face `tokenizers` on Render) |
 
-scripts/
+Large dataset folders (for example PlantVillage trees) and virtual environments are listed in `.gitignore`; do not commit bulky image datasets unless you intend to.
 
-train_model.py — Script for training the CNN model on the leaf dataset.
+## Requirements
 
-evaluate_model.py — Script for evaluating the trained model on the validation/test set.
+- **Python 3.12** (recommended; matches `.python-version` and typical cloud wheels).
+- Dependencies are pinned in `requirements.txt` (Flask, Gunicorn, PyTorch/torchvision CPU builds, Transformers, Pillow, Requests).
 
-results/
+Install:
 
-confusion_matrix.png — Visualization of classification performance.
+```bash
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
 
-classification_report.txt — Detailed metrics including accuracy, precision, recall, and F1 score.
-
-🛠️ Requirements
-Python 3.8+
-
-TensorFlow/Keras
-
-OpenCV
-
-NumPy
-
-Matplotlib
-
-Sklearn
-
-You can install the requirements using:
-
-bash
-Copy
-Edit
 pip install -r requirements.txt
-(Make sure to create a requirements.txt listing the packages if needed.)
+```
 
-🚀 Usage
-Data Preparation:
-Place your leaf images in the data/images/ directory and the corresponding labels in data/labels/.
+## Model weight files
 
-Model Training:
-Run:
+Place these checkpoint files **next to `backend_app.py`** (repository root) if you want that architecture available:
 
-bash
-Copy
-Edit
-python scripts/train_model.py
-Model Evaluation:
-After training, evaluate the model:
+| Model in UI | Expected filename |
+|-------------|-------------------|
+| ResNet50 | `best_resnet50_plant_disease_model_all_classes.pth` |
+| InceptionV3 | `best_inceptionv3_plant_disease_model.pth` |
+| ViT | `fine_tuned_vit_model.pth` |
+| Custom ViT | `best_custom_vit_model.pth` |
 
-bash
-Copy
-Edit
-python scripts/evaluate_model.py
-Results:
-Check the results/ folder for evaluation metrics and confusion matrix.
+The web UI only lists models whose files exist. ViT paths also download pretrained / Hugging Face weights on first load (network required).
 
-🎯 Goal
-Achieve an accuracy of at least 80% on the validation set and enable reliable disease segmentation.
+## Run locally
 
-📚 References
-PlantVillage Dataset
+```bash
+python backend_app.py
+```
 
-TensorFlow Documentation
+Then open **http://127.0.0.1:5000** in your browser.
 
-OpenCV Documentation
+For a production-style local check:
+
+```bash
+gunicorn app:app --bind 127.0.0.1:5000 -w 1
+```
+
+Use **one worker** (`-w 1`) so multiple processes do not each duplicate large models in memory.
+
+## Deploy (e.g. Render)
+
+- **Build:** `pip install -r requirements.txt`
+- **Start:** `gunicorn app:app --bind 0.0.0.0:$PORT -w 1`
+- Set **Python 3.12** via `.python-version` or the host’s `PYTHON_VERSION` setting. Avoid default **3.14-only** environments if some packages lack wheels (build-from-source can fail on read-only build images).
+- Ensure checkpoint `.pth` files are present in the deployment root (or adjust paths). Lazy loading helps **512 MiB** plans but a single large ViT can still require more RAM; upgrade the instance if you see out-of-memory errors.
+
+## Optional: disease descriptions
+
+`scripts/desc_llm.py` calls the Google Gemini API for short text descriptions. For production, keep API keys out of source control and load them from environment variables or your host’s secret store.
+
+## Training and experimentation
+
+The `scripts/` directory contains trainers (for example ResNet, Inception, ViT transfer learning), preprocessing, and notebooks—useful if you retrain or evaluate on your own splits of plant disease data.
+
+## References
+
+- [PlantVillage dataset](https://arxiv.org/abs/1511.08060) (classic reference for plant disease classification)
+- [Flask](https://flask.palletsprojects.com/)
+- [PyTorch](https://pytorch.org/) / [TorchVision](https://pytorch.org/vision/)
+- [Hugging Face Transformers](https://huggingface.co/docs/transformers)
