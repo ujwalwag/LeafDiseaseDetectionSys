@@ -53,8 +53,10 @@ The web UI only lists models whose files exist. ViT paths also download pretrain
 ## Run locally
 
 ```bash
-python backend_app.py
+python app.py
 ```
+
+(or `python backend_app.py` — same app.)
 
 Then open **http://127.0.0.1:5000** in your browser.
 
@@ -72,10 +74,32 @@ Use **one worker** (`-w 1`) so multiple processes do not each duplicate large mo
 - **Start:** `gunicorn app:app --bind 0.0.0.0:$PORT -w 1`
 - Set **Python 3.12** via `.python-version` or the host’s `PYTHON_VERSION` setting. Avoid default **3.14-only** environments if some packages lack wheels (build-from-source can fail on read-only build images).
 - Ensure checkpoint `.pth` files are present in the deployment root (or adjust paths). Lazy loading helps **512 MiB** plans but a single large ViT can still require more RAM; upgrade the instance if you see out-of-memory errors.
+- **Gemini descriptions:** add `GEMINI_API_KEY` in the dashboard (Environment / secrets). Never commit API keys to the repository.
 
-## Optional: disease descriptions
+## Disease descriptions (Gemini)
 
-`scripts/desc_llm.py` calls the Google Gemini API for short text descriptions. For production, keep API keys out of source control and load them from environment variables or your host’s secret store.
+`scripts/desc_llm.py` calls Google’s **Generative Language API** for short disease summaries after each prediction.
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `GEMINI_API_KEY` | Yes, for live descriptions | Your [Google AI Studio / Gemini API](https://aistudio.google.com/apikey) key |
+| `GEMINI_API_URL` | No | Full `…/models/…:generateContent` URL; defaults to **gemini-2.5-flash** if unset |
+
+If `GEMINI_API_KEY` is missing, the app still returns predictions; the description field explains that the key is not configured.
+
+**Local example (Windows PowerShell):**
+
+```powershell
+$env:GEMINI_API_KEY = "your-key-here"
+python backend_app.py
+```
+
+**Local example (macOS / Linux):**
+
+```bash
+export GEMINI_API_KEY="your-key-here"
+python backend_app.py
+```
 
 ## Training and experimentation
 

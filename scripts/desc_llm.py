@@ -1,27 +1,43 @@
-import requests
 import json
+import os
 
+import requests
 
-GEMINI_API_KEY = "Your_API_Key" 
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+# Default model; override with GEMINI_API_URL if Google changes availability for your project.
+_DEFAULT_GEMINI_URL = (
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+)
+
 
 def generate_llm_description(predicted_class_label):
     """
     Generates a concise, scientific description for the predicted disease label using the Gemini API.
-    """
-    prompt = f"Provide a concise, scientific description of the plant disease: {predicted_class_label}. Focus on symptoms and common characteristics."
-    
-    headers = {
-        'Content-Type': 'application/json'
-    }
-    api_url_with_key = f"{GEMINI_API_URL}?key={GEMINI_API_KEY}" if GEMINI_API_KEY else GEMINI_API_URL
 
-    payload = {
-        "contents": [{"role": "user", "parts": [{"text": prompt}]}]
+    Set ``GEMINI_API_KEY`` in the environment. Optionally override the endpoint with ``GEMINI_API_URL``.
+    """
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        return (
+            "Description unavailable: set the GEMINI_API_KEY environment variable "
+            "to enable Gemini-generated disease summaries."
+        )
+
+    base_url = os.environ.get("GEMINI_API_URL", _DEFAULT_GEMINI_URL).strip() or _DEFAULT_GEMINI_URL
+    api_url_with_key = f"{base_url}?key={api_key}"
+
+    prompt = (
+        f"Provide a concise, scientific description of the plant disease: {predicted_class_label}. "
+        "Focus on symptoms and common characteristics."
+    )
+
+    headers = {
+        "Content-Type": "application/json",
     }
+
+    payload = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
 
     try:
-        response = requests.post(api_url_with_key, headers=headers, data=json.dumps(payload))
+        response = requests.post(api_url_with_key, headers=headers, data=json.dumps(payload), timeout=60)
         response.raise_for_status()
         result = response.json()
         
