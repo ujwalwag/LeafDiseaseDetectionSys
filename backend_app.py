@@ -75,6 +75,61 @@ MODEL_PATHS_CONFIG = {
     "Custom ViT": "best_custom_vit_model.pth"
 }
 
+# UI copy: best-first ranking. Mixes numbers from this repo with typical ranges—users should re-run evaluation.
+MODEL_GUIDE_RANKED = [
+    {
+        "rank": 1,
+        "model_type": "Custom ViT",
+        "accuracy_display": "98.1% (mean per-class)",
+        "accuracy_detail": (
+            "From scripts/vit_accuracy_per_class.py: macro average of per-class accuracies in that snapshot."
+        ),
+        "short_desc": (
+            "Fine-tuned ViT-Base (patch 16×224) on all 38 classes. Usually the strongest choice when the server "
+            "has enough RAM and you can wait for the first load."
+        ),
+    },
+    {
+        "rank": 2,
+        "model_type": "ResNet50",
+        "accuracy_display": "~mid-to-high 90s % typical",
+        "accuracy_detail": (
+            "ImageNet-pretrained ResNet-50 with a replaced classifier head; similar setups often reach the "
+            "mid-to-high 90s on PlantVillage-style benchmarks. Exact score depends on your training run."
+        ),
+        "short_desc": (
+            "Fast, compact CNN—best default on small instances (for example Render free tier) and a solid "
+            "accuracy-to-cost tradeoff."
+        ),
+    },
+    {
+        "rank": 3,
+        "model_type": "ViT",
+        "accuracy_display": "~96–98% typical band",
+        "accuracy_detail": (
+            "Fine-tuned vision transformer initialized from a crop-disease ViT checkpoint; strong models in "
+            "this family often land in the high 90s after good training—confirm on your validation split."
+        ),
+        "short_desc": (
+            "Transformer backbone plus your fine_tuned_vit weights. Heavier than ResNet50; first request may "
+            "download Hugging Face assets."
+        ),
+    },
+    {
+        "rank": 4,
+        "model_type": "InceptionV3",
+        "accuracy_display": "91.3% val / ~76.9% test top-1",
+        "accuracy_detail": (
+            "Logged in scripts/InceptionV3_trainer.ipynb: best validation accuracy 91.33%; same run reports "
+            "~76.9% top-1 test accuracy—use your own metrics for deployment decisions."
+        ),
+        "short_desc": (
+            "Inception modules for multi-scale context; useful for comparison but in this project’s logs it "
+            "trailed the best CNN/ViT checkpoints."
+        ),
+    },
+]
+
 
 loaded_models = {}
 loaded_feature_extractors = {}
@@ -227,6 +282,7 @@ def index():
     return render_template(
         'index.html',
         model_options=options,
+        model_guide=MODEL_GUIDE_RANKED,
         class_groups=class_groups,
         num_classes=NUM_CLASSES,
     )

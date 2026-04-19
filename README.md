@@ -63,7 +63,7 @@ Then open **http://127.0.0.1:5000** in your browser.
 For a production-style local check:
 
 ```bash
-gunicorn app:app --bind 127.0.0.1:5000 -w 1
+gunicorn app:app --bind 127.0.0.1:5000 -w 1 --timeout 300
 ```
 
 Use **one worker** (`-w 1`) so multiple processes do not each duplicate large models in memory.
@@ -71,7 +71,8 @@ Use **one worker** (`-w 1`) so multiple processes do not each duplicate large mo
 ## Deploy (e.g. Render)
 
 - **Build:** `pip install -r requirements.txt`
-- **Start:** `gunicorn app:app --bind 0.0.0.0:$PORT -w 1`
+- **Start:** `gunicorn app:app --bind 0.0.0.0:$PORT -w 1 --timeout 300`  
+  The default Gunicorn timeout (**30s**) is often too short: switching models triggers lazy load plus Hugging Face downloads, and Render may return an **empty or non-JSON** error body — the UI then used to show “Unexpected end of JSON input”. Use **300** seconds (or higher) for first-time ViT loads.
 - Set **Python 3.12** via `.python-version` or the host’s `PYTHON_VERSION` setting. Avoid default **3.14-only** environments if some packages lack wheels (build-from-source can fail on read-only build images).
 - Ensure checkpoint `.pth` files are present in the deployment root (or adjust paths). Lazy loading helps **512 MiB** plans but a single large ViT can still require more RAM; upgrade the instance if you see out-of-memory errors.
 - **Gemini descriptions:** add `GEMINI_API_KEY` in the dashboard (Environment / secrets). Never commit API keys to the repository.

@@ -98,7 +98,30 @@
             </section>
 
             <section class="card text-center" aria-labelledby="try-heading">
-                <h2 id="try-heading" class="text-xl font-bold text-gray-800 mb-6 text-left">Try a prediction</h2>
+                <h2 id="try-heading" class="text-xl font-bold text-gray-800 mb-4 text-left">Try a prediction</h2>
+
+                <div class="mb-8 text-left rounded-lg border border-gray-200 bg-gray-50 p-4" aria-labelledby="model-guide-heading">
+                    <h3 id="model-guide-heading" class="text-lg font-semibold text-gray-800 mb-1">Best models (accuracy order)</h3>
+                    <p class="text-xs text-gray-500 mb-4 leading-relaxed">
+                        Ranked for expected performance on this app’s 38-class setup. Some figures come from this repository’s
+                        training/evaluation artifacts; others are typical ranges—always re-check on your own test data.
+                    </p>
+                    <div class="space-y-3" role="list">
+                        {% for m in model_guide %}
+                        <div class="flex gap-3 text-left rounded-md bg-white border border-gray-100 p-3 shadow-sm" role="listitem">
+                            <span class="flex-shrink-0 w-9 h-9 rounded-full bg-green-600 text-white text-sm font-bold flex items-center justify-center" aria-hidden="true">{{ m.rank }}</span>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0">
+                                    <span class="font-semibold text-gray-900">{{ m.model_type }}</span>
+                                    <span class="text-green-700 font-bold text-sm whitespace-nowrap">{{ m.accuracy_display }}</span>
+                                </div>
+                                <p class="text-xs text-gray-500 mt-1 leading-snug">{{ m.accuracy_detail }}</p>
+                                <p class="text-sm text-gray-700 mt-2 leading-relaxed">{{ m.short_desc }}</p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
 
                 <div class="mb-6 text-left">
                     <label for="modelSelect" class="block text-gray-700 text-lg font-semibold mb-2">Select model</label>
@@ -188,12 +211,31 @@
                     body: formData,
                 });
 
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || 'Prediction failed');
+                const raw = await response.text();
+                let data = null;
+                if (raw) {
+                    try {
+                        data = JSON.parse(raw);
+                    } catch (parseErr) {
+                        const preview = raw.length > 220 ? raw.slice(0, 220) + '…' : raw;
+                        throw new Error(
+                            `Server returned non-JSON (HTTP ${response.status}). ` +
+                            (preview ? preview : '') +
+                            ' If this happens when switching models, the host may have timed out while loading weights — increase Gunicorn --timeout (e.g. 300).'
+                        );
+                    }
+                } else {
+                    throw new Error(
+                        `Empty response (HTTP ${response.status}). Often a timeout or worker crash while loading a larger model. ` +
+                        'On Render, use a longer Gunicorn timeout (e.g. --timeout 300) and enough RAM for ViT / Inception.'
+                    );
                 }
 
-                const data = await response.json();
+                if (!response.ok) {
+                    const msg = (data && (data.error || data.message)) || `Prediction failed (${response.status})`;
+                    throw new Error(msg);
+                }
+
                 predictionLabel.textContent = data.label;
                 confidenceScore.textContent = data.confidence;
                 diseaseDescription.textContent = data.description;
