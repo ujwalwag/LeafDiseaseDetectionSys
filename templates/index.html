@@ -179,10 +179,16 @@
             try {
                 return JSON.parse(raw);
             } catch (parseErr) {
+                const t = raw.trimStart();
+                if (t.startsWith('<!DOCTYPE') || t.slice(0, 5).toLowerCase() === '<html') {
+                    throw new Error(
+                        `Bad gateway (HTTP ${response.status}). The host returned an HTML error page — usually the worker ` +
+                        `crashed (often out-of-memory on ViT) or hit a platform timeout. Try ResNet50, upgrade RAM, ` +
+                        `and ensure the Render build runs: python scripts/warm_model_caches.py (see README).`
+                    );
+                }
                 const preview = raw.length > 220 ? raw.slice(0, 220) + '…' : raw;
-                throw new Error(
-                    `Server returned non-JSON (HTTP ${response.status}). ${preview}`
-                );
+                throw new Error(`Server returned non-JSON (HTTP ${response.status}). ${preview}`);
             }
         }
 

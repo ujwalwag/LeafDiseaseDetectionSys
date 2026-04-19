@@ -1,7 +1,20 @@
+import os
+
+# Repo-local caches so Render (and CI) can warm weights at build time and avoid huge runtime downloads.
+_ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+_CACHE_ROOT = os.path.join(_ROOT_DIR, ".model_caches")
+_HF_CACHE = os.path.join(_CACHE_ROOT, "huggingface")
+_TORCH_CACHE = os.path.join(_CACHE_ROOT, "torch")
+for _d in (_CACHE_ROOT, _HF_CACHE, _TORCH_CACHE):
+    os.makedirs(_d, exist_ok=True)
+os.environ.setdefault("HF_HOME", _HF_CACHE)
+os.environ.setdefault("HUGGINGFACE_HUB_CACHE", _HF_CACHE)
+os.environ.setdefault("TRANSFORMERS_CACHE", _HF_CACHE)
+os.environ.setdefault("TORCH_HOME", _TORCH_CACHE)
+
 from flask import Flask, request, jsonify, render_template
 import gc
 import io
-import os
 import threading
 
 import torch
@@ -9,7 +22,7 @@ import torch.nn as nn
 from PIL import Image
 from torchvision import transforms, models
 
-from transformers import ViTFeatureExtractor, ViTForImageClassification 
+from transformers import ViTFeatureExtractor, ViTForImageClassification
 
 
 try:
@@ -253,8 +266,9 @@ def get_inceptionv3_model(num_classes_model):
 def get_vit_model(num_classes_model):
  
     model = ViTForImageClassification.from_pretrained(
-        'wambugu1738/crop_leaf_diseases_vit',
-        ignore_mismatched_sizes=True
+        "wambugu1738/crop_leaf_diseases_vit",
+        ignore_mismatched_sizes=True,
+        low_cpu_mem_usage=True,
     )
     in_features = model.classifier.in_features
     model.classifier = nn.Linear(in_features, num_classes_model)
@@ -263,9 +277,10 @@ def get_vit_model(num_classes_model):
 def get_custom_vit_model(num_classes_model):
  
     model = ViTForImageClassification.from_pretrained(
-        'google/vit-base-patch16-224',
+        "google/vit-base-patch16-224",
         num_labels=num_classes_model,
-        ignore_mismatched_sizes=True
+        ignore_mismatched_sizes=True,
+        low_cpu_mem_usage=True,
     )
     if not isinstance(model.classifier, nn.Linear):
          in_features = model.classifier.in_features if hasattr(model.classifier, 'in_features') else model.config.hidden_size

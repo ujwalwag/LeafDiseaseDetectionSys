@@ -70,7 +70,8 @@ Use **one worker** (`-w 1`) so multiple processes do not each duplicate large mo
 
 ## Deploy (e.g. Render)
 
-- **Build:** `pip install -r requirements.txt`
+- **Build:** `pip install -r requirements.txt && python scripts/warm_model_caches.py`  
+  This pre-downloads **torchvision** ImageNet weights and **Hugging Face** ViT files into **`.model_caches/`** (same paths the app uses), so the first `/prepare_model` after deploy does not spend minutes on the network (fewer **502** HTML errors from timeouts).
 - **Start (recommended):** `gunicorn -c gunicorn.conf.py app:app`  
   The repo’s **`gunicorn.conf.py`** binds to **`$PORT`**, uses **1 worker**, and sets **`timeout` to 600s** by default (override with env **`GUNICORN_TIMEOUT`**). Without this, Gunicorn’s **30s** default often kills workers during ViT / Hugging Face first load, which shows up as **HTTP 502** with an empty body.  
   The web UI also calls **`POST /prepare_model`** before **`POST /predict`**, so model download/load and inference are **separate requests**, each staying under the worker timeout when configured as above. If you still see 502s on ViT, the instance likely needs **more RAM** (OOM), not only a longer timeout.
