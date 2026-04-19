@@ -287,6 +287,19 @@ def index():
         num_classes=NUM_CLASSES,
     )
 
+
+@app.route("/prepare_model", methods=["POST"])
+def prepare_model():
+    """Load (or switch) the active model only—keeps /predict fast and avoids one huge combined request."""
+    model_type = request.form.get("model_type")
+    if not model_type or model_type not in MODEL_PATHS_CONFIG:
+        return jsonify({"ok": False, "error": "Invalid model type."}), 400
+    ok, err = ensure_model_loaded(model_type)
+    if not ok:
+        return jsonify({"ok": False, "error": err or "Could not load model"}), 400
+    return jsonify({"ok": True, "model_type": model_type})
+
+
 @app.route('/predict', methods=['POST'])
 def predict():
     if 'file' not in request.files:
