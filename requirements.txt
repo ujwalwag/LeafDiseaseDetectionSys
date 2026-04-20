@@ -1,4 +1,5 @@
-# CPU wheels (Render/Linux may only ship newer torch builds for current Python).
+# Resolve regular packages from PyPI, and allow CPU torch wheels from PyTorch index.
+--index-url https://pypi.org/simple
 --extra-index-url https://download.pytorch.org/whl/cpu
 
 flask==3.0.3
@@ -8,4 +9,4 @@ torchvision==0.25.0+cpu
 transformers==4.46.3
 accelerate>=0.26.0
 pillow==10.4.0
-requests==2.32.3
+requests>=2.32.0,<3
