@@ -64,7 +64,7 @@
                 <h2 id="how-heading" class="text-xl font-bold text-gray-800 mb-3">How to use this page</h2>
                 <ol class="list-decimal list-inside text-gray-700 space-y-2 leading-relaxed">
                     <li>Read the supported plants and conditions below so you pick a realistic test image.</li>
-                    <li>Choose a model from the dropdown (only models with weight files on the server are listed). The selected model loads when you run detection; only one model is kept in memory at a time to save RAM—the first prediction after a switch may take longer.</li>
+                    <li>Choose a model from the dropdown (each option may load only if its weights file is available on the server).</li>
                     <li>Upload a <strong>JPG or PNG</strong> image showing a <strong>single leaf</strong> in reasonable focus and lighting.</li>
                     <li>Click <strong>Detect Disease</strong> and review the predicted label, confidence score, and description.</li>
                 </ol>
@@ -98,36 +98,12 @@
             </section>
 
             <section class="card text-center" aria-labelledby="try-heading">
-                <h2 id="try-heading" class="text-xl font-bold text-gray-800 mb-4 text-left">Try a prediction</h2>
-
-                <div class="mb-8 text-left rounded-lg border border-gray-200 bg-gray-50 p-4" aria-labelledby="model-guide-heading">
-                    <h3 id="model-guide-heading" class="text-lg font-semibold text-gray-800 mb-1">Best models (accuracy order)</h3>
-                    <p class="text-xs text-gray-500 mb-4 leading-relaxed">
-                        Ranked for expected performance on this app’s 38-class setup. Some figures come from this repository’s
-                        training/evaluation artifacts; others are typical ranges—always re-check on your own test data.
-                    </p>
-                    <div class="space-y-3" role="list">
-                        {% for m in model_guide %}
-                        <div class="flex gap-3 text-left rounded-md bg-white border border-gray-100 p-3 shadow-sm" role="listitem">
-                            <span class="flex-shrink-0 w-9 h-9 rounded-full bg-green-600 text-white text-sm font-bold flex items-center justify-center" aria-hidden="true">{{ m.rank }}</span>
-                            <div class="min-w-0 flex-1">
-                                <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0">
-                                    <span class="font-semibold text-gray-900">{{ m.model_type }}</span>
-                                    <span class="text-green-700 font-bold text-sm whitespace-nowrap">{{ m.accuracy_display }}</span>
-                                </div>
-                                <p class="text-xs text-gray-500 mt-1 leading-snug">{{ m.accuracy_detail }}</p>
-                                <p class="text-sm text-gray-700 mt-2 leading-relaxed">{{ m.short_desc }}</p>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
+                <h2 id="try-heading" class="text-xl font-bold text-gray-800 mb-6 text-left">Try a prediction</h2>
 
                 <div class="mb-6 text-left">
                     <label for="modelSelect" class="block text-gray-700 text-lg font-semibold mb-2">Select model</label>
                     <select id="modelSelect" class="block w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-green-500 focus:border-green-500 text-gray-700">
                     </select>
-                    <p id="modelLoadStatus" class="text-sm text-gray-600 mt-2 min-h-[1.25rem] leading-snug" aria-live="polite"></p>
                 </div>
 
                 <div class="mb-6 text-left">
@@ -155,7 +131,6 @@
 
     <script>
         const modelSelect = document.getElementById('modelSelect');
-        const modelLoadStatus = document.getElementById('modelLoadStatus');
         const imageUpload = document.getElementById('imageUpload');
         const predictButton = document.getElementById('predictButton');
         const buttonText = document.getElementById('buttonText');
@@ -167,72 +142,12 @@
         const diseaseDescription = document.getElementById('diseaseDescription');
 
         const modelOptions = {{ model_options | tojson }};
-
-        async function readJsonSafe(response) {
-            const raw = await response.text();
-            if (!raw) {
-                throw new Error(
-                    `Empty response (HTTP ${response.status}). Often a proxy/worker timeout or OOM while loading a large model. ` +
-                    'On Render: use start command `gunicorn -c gunicorn.conf.py app:app` (see repo) and enough RAM for ViT.'
-                );
-            }
-            try {
-                return JSON.parse(raw);
-            } catch (parseErr) {
-                const t = raw.trimStart();
-                if (t.startsWith('<!DOCTYPE') || t.slice(0, 5).toLowerCase() === '<html') {
-                    throw new Error(
-                        `Bad gateway (HTTP ${response.status}). The host returned an HTML error page — usually the worker ` +
-                        `crashed (often out-of-memory on ViT) or hit a platform timeout. Try ResNet50, upgrade RAM, ` +
-                        `and ensure the Render build runs: python scripts/warm_model_caches.py (see README).`
-                    );
-                }
-                const preview = raw.length > 220 ? raw.slice(0, 220) + '…' : raw;
-                throw new Error(`Server returned non-JSON (HTTP ${response.status}). ${preview}`);
-            }
-        }
-
-        async function prepareModel() {
-            const formData = new FormData();
-            formData.append('model_type', modelSelect.value);
-            const response = await fetch('/prepare_model', {
-                method: 'POST',
-                body: formData,
-            });
-            const data = await readJsonSafe(response);
-            if (!response.ok || !data.ok) {
-                throw new Error(data.error || `Could not load model (HTTP ${response.status})`);
-            }
-            modelLoadStatus.textContent = 'Model ready: ' + modelSelect.value + '.';
-            modelLoadStatus.classList.remove('text-amber-700');
-            modelLoadStatus.classList.add('text-gray-600');
-        }
-
         modelOptions.forEach(model => {
             const option = document.createElement('option');
             option.value = model;
             option.textContent = model;
             modelSelect.appendChild(option);
         });
-
-        modelSelect.addEventListener('change', function() {
-            modelLoadStatus.textContent = 'Loading model (first time can take several minutes on cloud hosts)…';
-            modelLoadStatus.classList.add('text-amber-700');
-            modelLoadStatus.classList.remove('text-gray-600');
-            prepareModel().catch(err => {
-                modelLoadStatus.textContent = 'Model load failed: ' + err.message;
-                modelLoadStatus.classList.add('text-red-700');
-            });
-        });
-
-        if (modelOptions.length) {
-            modelLoadStatus.textContent = 'Loading default model…';
-            modelLoadStatus.classList.add('text-amber-700');
-            prepareModel().catch(err => {
-                modelLoadStatus.textContent = 'Model load failed: ' + err.message;
-                modelLoadStatus.classList.add('text-red-700');
-            });
-        }
 
         imageUpload.addEventListener('change', function(event) {
             const file = event.target.files[0];
@@ -256,35 +171,29 @@
                 return;
             }
 
+            buttonText.textContent = 'Detecting...';
             loadingSpinner.classList.remove('hidden');
             predictButton.disabled = true;
-            predictionLabel.textContent = 'Preparing…';
-            confidenceScore.textContent = '…';
-            diseaseDescription.textContent = 'Loading model if needed, then running inference…';
+            predictionLabel.textContent = 'Predicting...';
+            confidenceScore.textContent = '...';
+            diseaseDescription.textContent = 'Generating description...';
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('model_type', modelSelect.value);
 
             try {
-                buttonText.textContent = 'Preparing model…';
-                await prepareModel();
-
-                buttonText.textContent = 'Detecting…';
-                predictionLabel.textContent = 'Predicting…';
-                diseaseDescription.textContent = 'Generating description…';
-
-                const formData = new FormData();
-                formData.append('file', file);
-                formData.append('model_type', modelSelect.value);
-
                 const response = await fetch('/predict', {
                     method: 'POST',
                     body: formData,
                 });
-                const data = await readJsonSafe(response);
 
                 if (!response.ok) {
-                    const msg = (data && (data.error || data.message)) || `Prediction failed (${response.status})`;
-                    throw new Error(msg);
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Prediction failed');
                 }
 
+                const data = await response.json();
                 predictionLabel.textContent = data.label;
                 confidenceScore.textContent = data.confidence;
                 diseaseDescription.textContent = data.description;

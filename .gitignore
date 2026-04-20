@@ -1,9 +1,6 @@
 venv/
 .venv/
 
-# Downloaded by scripts/warm_model_caches.py (Render build / local); do not commit.
-.model_caches/
-
 # Dataset images (large; do not commit)
 PlantVillage-Dataset-Downloaded/**/*.jpg
 PlantVillage-Dataset-Downloaded/**/*.jpeg
