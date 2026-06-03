@@ -109,7 +109,7 @@ The `scripts/` directory contains trainers (for example ResNet, Inception, ViT t
 
 ## References
 
-- [PlantVillage dataset](https://arxiv.org/abs/1511.08060) (classic reference for plant disease classification)
+- [PlantVillage dataset](https://github.com/spmohanty/plantvillage-dataset) (classic reference for plant disease classification)
 - [Flask](https://flask.palletsprojects.com/)
 - [PyTorch](https://pytorch.org/) / [TorchVision](https://pytorch.org/vision/)
 - [Hugging Face Transformers](https://huggingface.co/docs/transformers)
